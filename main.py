@@ -272,7 +272,7 @@ if secili_yil_mahalle:
             data=output.getvalue(),
             file_name=f"mahalle_ham_veri_{secili_yil_mahalle}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-             use_container_width=True,
+            use_container_width=True,
             type="secondary"
         )
 
@@ -292,7 +292,7 @@ if secili_yil_mahalle:
             data=pivot_output.getvalue(),
             file_name=f"mahalle_pivot_{secili_yil_mahalle}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-             use_container_width=True,
+            use_container_width=True,
             type="primary"
         )
 
