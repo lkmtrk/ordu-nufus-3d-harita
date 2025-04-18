@@ -9,6 +9,18 @@ from io import BytesIO
 
 # Sayfa ayarları
 st.set_page_config(page_title="Ordu Nüfus Haritası", layout="wide")
+# Global CSS ile PyDeck tooltip arka planı ve metin rengi özelleştirme
+st.markdown("""
+<style>
+  .deck-tooltip {
+    background-color: magenta !important;
+    color: white !important;
+    border-radius: 4px;
+    padding: 4px;
+  }
+</style>
+""", unsafe_allow_html=True)
+
 st.markdown("## 📊 Ordu İli Nüfus Haritası (2007 - 2024)")
 
 # Veri yükle
