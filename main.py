@@ -7,6 +7,55 @@ import math
 import colorsys  # renk paleti için HSV dönüşümü
 from io import BytesIO
 
+# Kategori bazlı renk fonksiyonu
+def kategori_renk(v):
+    if v <= 5000:
+        # 0-5000 aralığı kahverengi
+        return [166, 86, 40, 180]
+    elif v <= 10000:
+        # 5000-10000 aralığı mor
+        return [152, 78, 163, 180]
+    elif v <= 15000:
+        # 10000-15000 aralığı yeşil
+        return [77, 175, 74, 180]
+    elif v <= 20000:
+        # 15000-20000 aralığı mavi
+        return [55, 126, 184, 180]
+    elif v <= 25000:
+        # 20000-25000 aralığı turuncu
+        return [255, 127, 0, 180]
+    elif v <= 30000:
+        # 25000-30000 aralığı sarı
+        return [255, 255, 51, 180]
+    else:
+        # 30000+ aralığı kırmızı
+        return [228, 26, 28, 180]
+    
+# İlçe kategori renk fonksiyonu ve manuel aralık atama (7 kategori)
+def ilce_renk(v):
+    if v <= 10000:
+        # 0–10.000
+        return [166, 86, 40, 180]
+    elif v <= 13000:
+        # 10.000–13.000
+        return [152, 78, 163, 180]
+    elif v <= 20000:
+        # 13.000–20.000
+        return [77, 175, 74, 180]
+    elif v <= 25000:
+        # 20.000–25.000
+        return [55, 126, 184, 180]
+    elif v <= 100000:
+        # 25.000–100.000
+        return [255, 127, 0, 180]
+    elif v <= 200000:
+        # 100.000–200.000
+        return [255, 255, 51, 180]
+    else:
+        # 200.000–250.000
+        return [228, 26, 28, 180]
+
+
 # Sayfa ayarları
 st.set_page_config(page_title="Ordu Nüfus Haritası", layout="wide")
 # Global CSS ile PyDeck tooltip arka planı ve metin rengi özelleştirme
@@ -148,9 +197,7 @@ if secili_yil_ilce:
 
 
     # Renk kategorileri (5)
-    bins = pd.qcut(df_ilce["NÜFUS"], q=5, duplicates='drop')
-    palette = [[255,230,230,180],[255,153,153,180],[255,76,76,180],[204,0,0,180],[153,0,0,180]]
-    df_ilce["color"] = [palette[i] for i in pd.factorize(bins)[0]]
+    df_ilce["color"] = df_ilce["NÜFUS"].apply(ilce_renk)
 
     # Harita
     layer_ilce = pdk.Layer(
@@ -312,8 +359,8 @@ if secili_yil_mahalle:
     df_mahalle['NÜFUS_FMT'] = df_mahalle['NÜFUS'].apply(lambda v: f"{int(v):,}".replace(',', '.'))
     gmin, gmax = df["NÜFUS"].min(), df["NÜFUS"].max()
 
-    df_mahalle["color"] = df_mahalle["NÜFUS"].apply(
-        lambda v: [int((v - gmin) / (gmax - gmin) * 255), 50, int((1 - (v - gmin) / (gmax - gmin)) * 255), 180])
+    df_mahalle["color"] = df_mahalle["NÜFUS"].apply(kategori_renk)
+
 
     # --- Harita ---
     st.pydeck_chart(pdk.Deck(
@@ -346,9 +393,27 @@ if secili_yil_mahalle:
 
     with col_excel1:
         output = BytesIO()
-        df_mahalle_filtered = df_mahalle[["İLÇE", "MAHALLE", "NÜFUS"]].copy()
+        # 1) Ham Veri: tüm kayıtları al
+        df_mahalle_filtered = df_mahalle.copy()
+        # 2) Yıl sütunu ekle
         df_mahalle_filtered["YIL"] = secili_yil_mahalle
-        df_mahalle_filtered.to_excel(output, index=False, sheet_name="Ham Veri")
+        # 3) Saf URL sütunu ekle (lat/lon’dan)
+        df_mahalle_filtered["KONUMA GİT"] = df_mahalle_filtered.apply(
+            lambda row: f"https://www.google.com/maps?q={row['lat']},{row['lon']}&z=13&hl=tr",
+            axis=1
+        )
+        # 4) Sadece gerekli sütunları seç
+        df_export = df_mahalle_filtered[["İLÇE", "MAHALLE", "YIL", "NÜFUS", "KONUMA GİT"]]
+        # 5) Gerçek Excel hyperlink hücreleri oluşturmak için xlsxwriter
+        with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+            df_export.to_excel(writer, sheet_name="Ham Veri", index=False)
+            workbook  = writer.book
+            worksheet = writer.sheets["Ham Veri"]
+            link_col = df_export.columns.get_loc("KONUMA GİT")
+            for idx, url in enumerate(df_export["KONUMA GİT"], start=1):
+                worksheet.write_url(idx, link_col, url, string="Git")
+
+        # 6) İndirme butonunu oluştur
         st.download_button(
             "Ham Veriyi indir",
             data=output.getvalue(),
@@ -358,17 +423,51 @@ if secili_yil_mahalle:
             type="secondary"
         )
 
+
     with col_excel2:
         pivot_output = BytesIO()
+
+        # 1) “KONUMA GİT” sütununu hazırla
+        df_mahalle_filtered = df_mahalle.copy()
+        df_mahalle_filtered["YIL"] = secili_yil_mahalle
+        df_mahalle_filtered["KONUMA GİT"] = df_mahalle_filtered.apply(
+            lambda row: f"https://www.google.com/maps?q={row['lat']},{row['lon']}&z=13&hl=tr",
+            axis=1
+        )
+
+        # 2) Pivot tabloyu İlçe + Mahalle bazında oluştur
         pivot_df = pd.pivot_table(
             df_mahalle_filtered,
-            index="MAHALLE",
+            index=["İLÇE", "MAHALLE"],
             columns="YIL",
             values="NÜFUS",
             aggfunc="sum"
+        ).reset_index()
+
+        # 3) Genel Toplam satırını ekle
+        totals = pivot_df.select_dtypes(include=[int, float]).sum()
+        totals["İLÇE"] = "Genel Toplam"
+        totals["MAHALLE"] = ""
+        pivot_df = pd.concat([pivot_df, totals.to_frame().T], ignore_index=True)
+
+        # 4) Son sütun olarak “KONUMA GİT” ekle (Genel Toplam için boş bırak)
+        coord_map = df_mahalle_filtered.set_index(["İLÇE", "MAHALLE"])["KONUMA GİT"]
+        pivot_df["KONUMA GİT"] = pivot_df.apply(
+            lambda row: coord_map.get((row["İLÇE"], row["MAHALLE"]), ""),
+            axis=1
         )
-        pivot_df.loc["Genel Toplam"] = pivot_df.sum(numeric_only=True)
-        pivot_df.to_excel(pivot_output, sheet_name="Pivot Tablo")
+
+        # 5) Gerçek hyperlink hücrelerini yaz (xlsxwriter)
+        with pd.ExcelWriter(pivot_output, engine="xlsxwriter") as writer:
+            pivot_df.to_excel(writer, sheet_name="Pivot Tablo", index=False)
+            workbook  = writer.book
+            worksheet = writer.sheets["Pivot Tablo"]
+            git_col = pivot_df.columns.get_loc("KONUMA GİT")
+            for idx, url in enumerate(pivot_df["KONUMA GİT"], start=1):
+                if url:
+                    worksheet.write_url(idx, git_col, url, string="Git")
+
+        # 6) Download butonu
         st.download_button(
             "Pivot Tabloyu indir",
             data=pivot_output.getvalue(),
