@@ -75,7 +75,7 @@ st.pydeck_chart(pdk.Deck(
 # -------------------------------
 # 2. İLÇE BAZLI NÜFUS Harita ve Filtre
 # -------------------------------
-st.markdown("### 🗺️ İlçe Bazlı Nüfus Haritası (Yıl & Aralık)")
+st.markdown("### 🗺️ İlçe Bazlı Nüfus Haritası (Yıl & Nüfus Aralığı)")
 
 secili_yil_ilce = st.selectbox(
     "İlçe Haritası için Yıl Seçiniz",
